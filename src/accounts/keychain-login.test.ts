@@ -22,7 +22,12 @@ import {
   writeKeychainCredential,
   deleteKeychainCredential,
 } from './keychain.js';
-import { readCredential, writeCredential, removeCredential } from './credential-storage.js';
+import {
+  hasCredential,
+  readCredential,
+  writeCredential,
+  removeCredential,
+} from './credential-storage.js';
 import { renameAccount } from './rename.js';
 import { removeSessionDir } from '../session/session-dir.js';
 import { removeCommand } from '../commands/remove.js';
@@ -197,6 +202,17 @@ describe('Keychain-only profiles', () => {
     expect(readFileSync(file, 'utf8')).toBe(stale);
   });
 
+  it('distinguishes an absent credential from a failed Keychain or file read', () => {
+    expect(hasCredential(credentialPath(dir))).toBe(true);
+    expect(hasCredential(credentialPath(home))).toBe(false);
+    vi.mocked(readKeychainCredential).mockImplementationOnce(() => {
+      throw new Error('Keychain is locked');
+    });
+    expect(() => hasCredential(credentialPath(dir))).toThrow('Keychain is locked');
+    mkdirSync(credentialPath(home));
+    expect(() => hasCredential(credentialPath(home))).toThrow();
+  });
+
   it('surfaces failed Keychain writes without falling back to a file', () => {
     vi.mocked(writeKeychainCredential).mockImplementationOnce(() => {
       throw new Error('locked');
@@ -214,9 +230,27 @@ describe('Keychain-only profiles', () => {
     });
     expect(() => removeCredential(credentialPath(dir))).toThrow('locked');
     expect(keychain.has(dir)).toBe(true);
+    expect(existsSync(credentialPath(dir))).toBe(false);
     removeCredential(credentialPath(dir));
     expect(keychain.has(dir)).toBe(false);
     expect(existsSync(credentialPath(dir))).toBe(false);
+  });
+
+  it('attempts both credential deletions and reports both failures', () => {
+    mkdirSync(credentialPath(home));
+    keychain.set(home, credential('leftover'));
+    vi.mocked(deleteKeychainCredential).mockImplementationOnce(() => {
+      throw new Error('Keychain is locked');
+    });
+    let failure: unknown;
+    try {
+      removeCredential(credentialPath(home));
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toHaveLength(2);
+    expect((failure as AggregateError).errors[0].message).toBe('Keychain is locked');
   });
 
   it('keeps a Keychain-backed profile path stable when renaming its account', () => {
@@ -226,6 +260,24 @@ describe('Keychain-only profiles', () => {
     addAccount({ name: 'old', dir: oldDir }, context.ctx);
     expect(renameAccount('old', 'new', {}, context.ctx)).toMatchObject({ folderMoved: false });
     expect(getAccount('new', context.ctx)?.dir).toBe(oldDir);
+    expect(readOauthToken(credentialPath(oldDir))).toBe('old');
+  });
+
+  it('renames the account without moving its folder when Keychain cannot be checked', () => {
+    const oldDir = path.join(home, 'profiles', 'old');
+    mkdirSync(oldDir, { recursive: true });
+    keychain.set(oldDir, credential('old'));
+    addAccount({ name: 'old', dir: oldDir }, context.ctx);
+    vi.mocked(readKeychainCredential).mockImplementationOnce(() => {
+      throw new Error('Keychain is locked');
+    });
+    const result = renameAccount('old', 'new', {}, context.ctx);
+    expect(result.folderMoved).toBe(false);
+    expect(result.folderNote).toContain('Keychain is locked');
+    expect(getAccount('old', context.ctx)).toBeUndefined();
+    expect(getAccount('new', context.ctx)?.dir).toBe(oldDir);
+    expect(existsSync(oldDir)).toBe(true);
+    expect(existsSync(path.join(home, 'profiles', 'new'))).toBe(false);
     expect(readOauthToken(credentialPath(oldDir))).toBe('old');
   });
 

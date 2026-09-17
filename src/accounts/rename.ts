@@ -71,15 +71,19 @@ export function renameAccount(
     folderNote = 'its folder is in a custom location, so it kept its path';
   } else if (leaseFor(from, c)) {
     folderNote = 'a session is using it, so its folder kept the old name';
-  } else if (readKeychainCredential(account.dir) !== null) {
-    folderNote = 'its Keychain login is tied to its folder path, so it kept the old name';
   } else if (existsSync(destination)) {
     folderNote = `a folder called "${target}" already exists, so the old one kept its name`;
   } else {
     try {
-      renameSync(account.dir, destination);
-      folderMoved = true;
+      if (readKeychainCredential(account.dir) !== null) {
+        folderNote = 'its Keychain login is tied to its folder path, so it kept the old name';
+      } else {
+        renameSync(account.dir, destination);
+        folderMoved = true;
+      }
     } catch (err) {
+      // An unreadable Keychain is not evidence that moving the folder is safe.
+      // Keep the path while allowing the account's name and metadata to change.
       folderNote = `its folder could not be moved (${(err as Error).message}), so it kept the old name`;
     }
   }

@@ -1,6 +1,7 @@
 import { hasCredential } from '../accounts/credential-storage.js';
 import path from 'node:path';
 import { credentialFingerprint } from '../accounts/credential-vault.js';
+import { thrownReason } from '../util/thrown-reason.js';
 import type { DoctorCheck } from './doctor.js';
 
 /**
@@ -63,8 +64,12 @@ export function auditSessionAccount(input: SessionAccountInput): DoctorCheck {
     };
   }
 
-  if (!exists(path.join(input.sessionDir, '.credentials.json'))) {
-    return { name, ok: true, detail: 'no session is running' };
+  try {
+    if (!exists(path.join(input.sessionDir, '.credentials.json'))) {
+      return { name, ok: true, detail: 'no session is running' };
+    }
+  } catch (error) {
+    return { name, ok: false, detail: `could not check the session login: ${thrownReason(error)}` };
   }
 
   const sessionLogin = fingerprintOf(input.sessionDir);

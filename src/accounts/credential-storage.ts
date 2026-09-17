@@ -23,12 +23,14 @@ export function readCredential(file: string): string {
   return readFileSync(file, 'utf8');
 }
 
+/** Only a missing item/file means absent; callers must report access failures. */
 export function hasCredential(file: string): boolean {
   try {
     readCredential(file);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return false;
+    throw error;
   }
 }
 
@@ -48,6 +50,20 @@ export function copyCredential(source: string, destination: string): void {
 
 /** Remove both stores so deleting Keychain cannot resurrect a stale file login. */
 export function removeCredential(file: string): void {
-  if (isLiveCredential(file)) deleteKeychainCredential(path.dirname(file));
-  rmSync(file, { force: true });
+  const errors: unknown[] = [];
+  try {
+    if (isLiveCredential(file)) deleteKeychainCredential(path.dirname(file));
+  } catch (error) {
+    errors.push(error);
+  }
+  // A locked Keychain must not prevent removal of a stale fallback file.
+  try {
+    rmSync(file, { force: true });
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'Could not remove Keychain and file credentials');
+  }
 }

@@ -1,4 +1,5 @@
 import { hasCredential, removeCredential } from '../accounts/credential-storage.js';
+import { thrownReason } from '../util/thrown-reason.js';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { configHome, type PathCtx } from '../config/paths.js';
@@ -517,7 +518,12 @@ export async function runInteractiveHotSwap(context: CliContext, args: string[])
    */
   const saveBack = (account: Account, confirmedOwner?: string | null): SaveOutcome => {
     // Nothing there to copy. A later tick may find one.
-    if (!hasCredential(sessionCreds)) return 'retry';
+    try {
+      if (!hasCredential(sessionCreds)) return 'retry';
+    } catch (error) {
+      logEvent(`could not read the session login to save it back: ${thrownReason(error)}`);
+      return 'retry';
+    }
     // Never propagate a corrupt credential: a killed or partial OAuth refresh
     // can leave the session credential empty or malformed, and overwriting a
     // good login with that is the worst outcome (installCredential re-checks).
