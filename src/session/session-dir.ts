@@ -244,7 +244,10 @@ export function removeSessionDir(dir: string): boolean {
     // delete below is skipped by the catch, and the next sweep tries again.
   }
   try {
-    if (!existsSync(dir)) return false;
+    if (!existsSync(dir)) {
+      clearCredential(dir);
+      return false;
+    }
     clearCredential(dir);
     rmSync(dir, { recursive: true, force: true });
     return true;
