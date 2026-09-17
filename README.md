@@ -284,11 +284,13 @@ Node.js 20 or newer. Installing compiles one small native piece
 ([`node-pty`](https://github.com/microsoft/node-pty)), so you need your OS's
 usual build tools (a C/C++ toolchain).
 
-Windows and Linux switch accounts by swapping the account's login file behind the
-scenes. macOS keeps logins in the Keychain, which a separate folder cannot
-isolate, so on macOS each account uses a long-lived token (created once per
-account with `ccx token <name>`); normal coding is unaffected. `ccx doctor` tells
-you which applies to your machine.
+Windows and Linux store account logins in credential files. On macOS, ccx also
+reads each profile's separate Claude Code Keychain entry, so `ccx add` and
+`ccx login` work with normal browser sign-in. Account checks, usage probes, and
+renewals use the same credential store. Existing Keychain entries stay in
+Keychain; session copies and rollback snapshots use owner-only files. Renaming
+a Keychain-backed account keeps its folder path because the Keychain entry is
+bound to that path. The existing `ccx token <name>` flow remains available.
 
 ## Your credentials stay yours
 

@@ -1,3 +1,4 @@
+import { clearCredential } from '../accounts/credential-vault.js';
 import {
   copyFileSync,
   existsSync,
@@ -244,6 +245,7 @@ export function removeSessionDir(dir: string): boolean {
   }
   try {
     if (!existsSync(dir)) return false;
+    clearCredential(dir);
     rmSync(dir, { recursive: true, force: true });
     return true;
   } catch {

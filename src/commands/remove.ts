@@ -1,3 +1,4 @@
+import { clearCredential } from '../accounts/credential-vault.js';
 import { rmSync } from 'node:fs';
 import { getAccount, removeAccount } from '../accounts/registry.js';
 import { getActive, setActive } from '../state/active.js';
@@ -35,6 +36,7 @@ export function removeCommand(
       );
       return 0;
     }
+    clearCredential(account.dir);
     rmSync(account.dir, { recursive: true, force: true });
     context.out(`removed "${name}" and purged ${account.dir}`);
   } else {

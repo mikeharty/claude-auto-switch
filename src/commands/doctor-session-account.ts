@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { hasCredential } from '../accounts/credential-storage.js';
 import path from 'node:path';
 import { credentialFingerprint } from '../accounts/credential-vault.js';
 import type { DoctorCheck } from './doctor.js';
@@ -46,7 +46,7 @@ export interface SessionAccountInput {
 export function auditSessionAccount(input: SessionAccountInput): DoctorCheck {
   const name = 'session-account';
   const fingerprintOf = input.fingerprintOf ?? credentialFingerprint;
-  const exists = input.exists ?? existsSync;
+  const exists = input.exists ?? hasCredential;
 
   // Checked first, because it explains every other symptom: whichever account
   // the credential comparison below reports, the other sessions are not on it.

@@ -1,3 +1,4 @@
+import { readKeychainCredential } from './keychain.js';
 import { existsSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { loadRegistry, saveRegistry } from './registry.js';
@@ -70,6 +71,8 @@ export function renameAccount(
     folderNote = 'its folder is in a custom location, so it kept its path';
   } else if (leaseFor(from, c)) {
     folderNote = 'a session is using it, so its folder kept the old name';
+  } else if (readKeychainCredential(account.dir) !== null) {
+    folderNote = 'its Keychain login is tied to its folder path, so it kept the old name';
   } else if (existsSync(destination)) {
     folderNote = `a folder called "${target}" already exists, so the old one kept its name`;
   } else {
