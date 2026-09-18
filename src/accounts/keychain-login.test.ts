@@ -29,11 +29,16 @@ import {
   removeCredential,
 } from './credential-storage.js';
 import { renameAccount } from './rename.js';
-import { removeSessionDir } from '../session/session-dir.js';
+import { removeSessionDir, sweepDeadSessionDirs } from '../session/session-dir.js';
 import { removeCommand } from '../commands/remove.js';
+import { getActive, setActive } from '../state/active.js';
 import { propagateRenewal } from './shared-login.js';
 
 const keychain = vi.hoisted(() => new Map<string, string>());
+vi.mock('node:fs', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('node:fs')>();
+  return { ...fs, rmSync: vi.fn(fs.rmSync) };
+});
 vi.mock('./keychain.js', () => ({
   readKeychainCredential: vi.fn((dir: string) => keychain.get(dir) ?? null),
   writeKeychainCredential: vi.fn((dir: string, text: string) => {
@@ -292,6 +297,62 @@ describe('Keychain-only profiles', () => {
     expect(removeCommand(context, 'purge', { purge: true })).toBe(0);
     expect(keychain.has(purgeDir)).toBe(false);
     expect(existsSync(purgeDir)).toBe(false);
+  });
+
+  it('clears an absent session directory Keychain entry and returns false', () => {
+    expect(existsSync(dir)).toBe(false);
+    expect(removeSessionDir(dir)).toBe(false);
+    expect(keychain.has(dir)).toBe(false);
+  });
+
+  it.each(['keychain', 'file'])('restores a %s session login after partial deletion and retries the sweep', (store) => {
+    const session = path.join(home, 'sessions', '123');
+    mkdirSync(session, { recursive: true });
+    const login = credential('session');
+    if (store === 'keychain') keychain.set(session, login);
+    else writeFileSync(credentialPath(session), login);
+    const realRm = vi.mocked(rmSync).getMockImplementation()!;
+    vi.mocked(rmSync).mockImplementation((target, options) => {
+      realRm(target, options);
+      if (target === session) throw new Error('partial deletion');
+    });
+    try {
+      expect(sweepDeadSessionDirs(context.ctx, { isAlive: () => false })).toEqual([]);
+      expect(readCredential(credentialPath(session))).toBe(login);
+    } finally {
+      vi.mocked(rmSync).mockImplementation(realRm);
+    }
+    expect(sweepDeadSessionDirs(context.ctx, { isAlive: () => false })).toEqual(['123']);
+    expect(existsSync(session)).toBe(false);
+    expect(keychain.has(session)).toBe(false);
+  });
+
+  it.each(['credential', 'directory'])('retains the registered active account after a %s purge failure', (failure) => {
+    const profile = path.join(home, 'profiles', 'purge');
+    mkdirSync(profile, { recursive: true });
+    keychain.set(profile, credential('purge'));
+    addAccount({ name: 'purge', dir: profile }, context.ctx);
+    setActive('purge', context.ctx);
+    const realRm = vi.mocked(rmSync).getMockImplementation()!;
+    if (failure === 'credential') {
+      vi.mocked(deleteKeychainCredential).mockImplementationOnce(() => { throw new Error('locked'); });
+    } else {
+      vi.mocked(rmSync).mockImplementation((target, options) => {
+        if (target === profile) throw new Error('busy');
+        realRm(target, options);
+      });
+    }
+    try {
+      expect(removeCommand(context, 'purge', { purge: true })).toBe(1);
+      expect(getAccount('purge', context.ctx)?.dir).toBe(profile);
+      expect(getActive(context.ctx)).toBe('purge');
+      expect(lines.join('\n')).toContain('account remains registered');
+    } finally {
+      vi.mocked(rmSync).mockImplementation(realRm);
+    }
+    expect(removeCommand(context, 'purge', { purge: true })).toBe(0);
+    expect(getAccount('purge', context.ctx)).toBeUndefined();
+    expect(getActive(context.ctx)).toBeNull();
   });
 
   it('propagates a verified renewal from a Keychain snapshot to a matching sibling', () => {

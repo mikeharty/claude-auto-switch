@@ -1,4 +1,5 @@
-import { clearCredential } from '../accounts/credential-vault.js';
+import { clearCredential, credentialPath } from '../accounts/credential-vault.js';
+import { readCredential, writeCredential } from '../accounts/credential-storage.js';
 import {
   copyFileSync,
   existsSync,
@@ -234,6 +235,7 @@ export function sweepDeadSessionDirs(c: PathCtx = {}, options: SweepOptions = {}
  * irreplaceable, which is why it does not rely on the delete being link-aware.
  */
 export function removeSessionDir(dir: string): boolean {
+  let credential: string | undefined;
   try {
     for (const entry of readdirSync(dir)) {
       const child = path.join(dir, entry);
@@ -248,10 +250,23 @@ export function removeSessionDir(dir: string): boolean {
       clearCredential(dir);
       return false;
     }
+    try {
+      credential = readCredential(credentialPath(dir));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') throw error;
+    }
     clearCredential(dir);
     rmSync(dir, { recursive: true, force: true });
     return true;
   } catch {
+    if (credential !== undefined) {
+      try {
+        // Recreates an owner-only fallback if cleanup already removed Keychain.
+        writeCredential(credentialPath(dir), credential);
+      } catch {
+        // The directory or credential store may still be inaccessible.
+      }
+    }
     return false; // busy (a live session, despite the pid check); next start retries
   }
 }

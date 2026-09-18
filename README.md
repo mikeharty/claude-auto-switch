@@ -300,8 +300,10 @@ login when it goes stale, and asking which account a login belongs to. That last
 one is what stops a login being copied into the wrong account, and it is asked
 only when a stored login changes. Nothing else leaves your machine.
 
-Each account's login is the same one Claude Code already saves, kept in its own
-folder under `~/.claude-auto-switch/`, written owner-only, and never committed.
+Each account's login is the same one Claude Code already saves. File-backed
+logins are kept in per-account folders under `~/.claude-auto-switch/`, written
+owner-only; macOS Keychain-backed logins use separate Claude Code Keychain
+entries for each account. Credentials remain yours and are never committed.
 Logins are created through your normal browser, so ccx never sees your password.
 See [SECURITY.md](SECURITY.md) for the full picture.
 
