@@ -20,6 +20,9 @@
  * word, nothing else. Allowing other words inside meant `_No major concerns_`
  * counted as a finding, which blocks a merge over reassurance.
  */
+// A finding header consists entirely of italic badges separated by pipes.
+// A severity label embedded in explanatory prose is not a header.
+const BADGE_HEADER = /^_[^_\n]+_(?:\s*\|\s*_[^_\n]+_)*$/;
 const SEVERITY_BADGE = /_[^\w_\n]*(critical|major|minor|nitpick)[^\w_\n]*_/i;
 
 /**
@@ -37,17 +40,30 @@ const SECTION_HEADING = /^[\s>*_#-]*(?:<summary>)?[^\w<\n]*(?:outside diff range
 
 /** Does this single line of a review body raise something? */
 export function isBodyFinding(line) {
-  const text = String(line ?? '').trim();
+  const text = String(line ?? '').replace(/^\s*(?:>\s*)*/, '').trim();
   if (text.length === 0) return false;
-  return SEVERITY_BADGE.test(text) || SECTION_HEADING.test(text);
+  return (BADGE_HEADER.test(text) && SEVERITY_BADGE.test(text)) || SECTION_HEADING.test(text);
 }
 
-/** Every finding raised in a block of review-body text. */
+/** Collect finding headers, excluding prose and fenced code examples. */
 export function bodyFindings(body) {
-  return String(body ?? '')
-    .split('\n')
-    .filter((line) => isBodyFinding(line))
-    .map((line) => line.trim());
+  const findings = [];
+  let fence;
+  for (const line of String(body ?? '').split('\n')) {
+    const text = line.replace(/^\s*(?:>\s*)*/, '').trim();
+    if (fence) {
+      // A closing fence must use the same character and at least the opening length.
+      if (new RegExp(`^${fence[0]}{${fence.length},}\\s*$`).test(text)) fence = undefined;
+      continue;
+    }
+    const opening = text.match(/^(`{3,}|~{3,})/);
+    if (opening) {
+      fence = opening[1];
+      continue;
+    }
+    if (isBodyFinding(line)) findings.push(line.trim());
+  }
+  return findings;
 }
 
 /**

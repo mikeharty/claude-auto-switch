@@ -575,3 +575,27 @@ describe('reviewerReportsNoUnreviewedCommits', () => {
     expect(reviewerReportsNoUnreviewedCommits(undefined, PUSHED_AT, isReviewerLogin)).toBe(false);
   });
 });
+
+it('collects finding headers without severity quotes or fenced examples', () => {
+  const minor = '_🎯 Functional Correctness_ | _🟡 Minor_ | _⚡ Quick win_';
+  const major = '_⚠️ Potential issue_ | _🟠 Major_';
+  const body = [
+    '> <details>',
+    '> <summary><em>🟡 Minor</em> · First finding</summary><blockquote>',
+    `> ${minor}`,
+    '> Details quote `_Major_` or `_Critical_` without raising a finding.',
+    '> ```markdown',
+    `> ${major}`,
+    '> ```',
+    '> ~~~markdown',
+    '> _🔴 Critical_',
+    '> ~~~',
+    '> </blockquote></details>',
+    '> <details>',
+    '> <summary><em>🟠 Major</em> · Second finding</summary><blockquote>',
+    `> ${major}`,
+    '> Real major finding details.',
+    '> </blockquote></details>',
+  ].join('\n');
+  expect(bodyFindings(body)).toEqual([`> ${minor}`, `> ${major}`]);
+});
