@@ -575,3 +575,55 @@ describe('reviewerReportsNoUnreviewedCommits', () => {
     expect(reviewerReportsNoUnreviewedCommits(undefined, PUSHED_AT, isReviewerLogin)).toBe(false);
   });
 });
+
+it('collects finding headers without severity quotes or fenced examples', () => {
+  const minor = '_🎯 Functional Correctness_ | _🟡 Minor_ | _⚡ Quick win_';
+  const major = '_⚠️ Potential issue_ | _🟠 Major_';
+  const body = [
+    '> <details>',
+    '> <summary><em>🟡 Minor</em> · First finding</summary><blockquote>',
+    `> ${minor}`,
+    '> Details quote `_Major_` or `_Critical_` without raising a finding.',
+    '> ```markdown',
+    `> ${major}`,
+    '> ```',
+    '> ~~~markdown',
+    '> _🔴 Critical_',
+    '> ~~~',
+    '> </blockquote></details>',
+    '> <details>',
+    '> <summary><em>🟠 Major</em> · Second finding</summary><blockquote>',
+    `> ${major}`,
+    '> Real major finding details.',
+    '> </blockquote></details>',
+  ].join('\n');
+  expect(bodyFindings(body)).toEqual([`> ${minor}`, `> ${major}`]);
+});
+
+it.each(['', '> ', '> > '])('preserves fence indentation after quote prefix %j', (prefix) => {
+  for (const fence of ['```', '~~~']) {
+    const major = '_🟠 Major_';
+    const body = [fence, `    ${fence}`, '_🔴 Critical_', fence, major]
+      .map((line) => prefix + line).join('\n');
+    expect(bodyFindings(body)).toEqual([prefix + major]);
+  }
+});
+
+it.each([0, 1, 2, 3])('recognizes fences with %i leading spaces', (indent) => {
+  const fence = ' '.repeat(indent) + '```';
+  expect(bodyFindings([fence, '_🔴 Critical_', fence, '_🟠 Major_'].join('\n')))
+    .toEqual(['_🟠 Major_']);
+});
+
+it('does not open a fence indented by four spaces', () => {
+  expect(bodyFindings('    ```\n_🟠 Major_')).toEqual(['_🟠 Major_']);
+});
+
+it.each(['```markdown`', '``` info `tick`', '> ```markdown`'])('rejects invalid backtick opener %j', (opening) => {
+  expect(bodyFindings(`${opening}\n_🟠 Major_`)).toEqual(['_🟠 Major_']);
+});
+
+it.each(['```markdown', '~~~ info `tick`'])('still recognizes valid fence opener %j', (opening) => {
+  const closing = opening.slice(0, 3);
+  expect(bodyFindings(`${opening}\n_🔴 Critical_\n${closing}\n_🟠 Major_`)).toEqual(['_🟠 Major_']);
+});

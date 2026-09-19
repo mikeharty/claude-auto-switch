@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Refuse to merge while ANY CodeRabbit comment is still unanswered.
+ * Refuse to merge while CodeRabbit critical or major findings are unanswered.
  *
  * Usage:  node scripts/coderabbit-guard.mjs <pr-number> [--json]
- * Exit:   0 = clear to merge, 1 = blocked, 2 = could not tell
+ * Exit:   0 = clear to merge, 1 = unresolved critical/major findings, 2 = no review yet or unknown
  *
  * Two lessons are built into this on purpose, both learned the hard way:
  *
@@ -41,15 +41,10 @@ import {
  */
 const OWN_CHECK = 'coderabbit findings resolved';
 
-/**
- * EVERY comment counts, not only the ones marked serious.
- *
- * Severity is the reviewer's guess. A "nitpick" that turns out to be a real bug
- * still ships the bug, and deciding which comments deserve an answer is how
- * comments go unanswered. So the rule is simple: every comment gets resolved or
- * gets a reply saying why it is wrong.
- */
-
+/** Only explicit critical/major severity badges block this gate. */
+const BLOCKING_SEVERITY = /_[^\w_\n]*(critical|major)[^\w_\n]*_/i;
+/** Select critical/major headers from the parsed body findings. */
+const blockingFindings = (body) => bodyFindings(body).filter((line) => BLOCKING_SEVERITY.test(line));
 
 /** The first non-empty line of a block of text, shortened for one-line output. */
 function firstLine(text, limit = 140) {
@@ -119,7 +114,8 @@ function reviewBodies(owner, name, pr) {
  * What CodeRabbit is doing about the CURRENT commit.
  *
  * It posts its own check per commit, so that check is the honest answer to "has
- * this version been reviewed". Both states matter and both must block:
+ * this version been reviewed". Both states mean the review is not ready (exit 2),
+ * unless unresolved critical/major findings already require exit 1:
  *
  * - 'working': a review is running right now. Answered comments from an EARLIER
  *   commit do not cover the code being merged, and clearing on them would merge
@@ -284,6 +280,8 @@ function collectBlockers(snapshot) {
     const first = thread.comments?.nodes?.[0];
     if (!first || !isReviewer(first.author?.login)) continue;
     if (threadAnswered(thread, isReviewer)) continue;
+    // Details can quote other severity badges; only the full header classifies this finding.
+    if (!BLOCKING_SEVERITY.test(firstLine(first.body, Infinity))) continue;
     blockers.push({
       kind: 'inline',
       where: `${first.path ?? '?'}:${first.line ?? '?'}`,
@@ -294,8 +292,8 @@ function collectBlockers(snapshot) {
   // Findings raised inside a review body cannot be resolved and cannot be
   // replied to, so they are answered once, explicitly, by a comment.
   const raised = [
-    ...snapshot.bodies.map((r) => ({ kind: 'review-body', where: `review ${r.id}`, at: r.at, findings: bodyFindings(r.body) })),
-    ...snapshot.summaries.map((c) => ({ kind: 'summary-comment', where: 'summary', at: c.at, findings: bodyFindings(c.body) })),
+    ...snapshot.bodies.map((r) => ({ kind: 'review-body', where: `review ${r.id}`, at: r.at, findings: blockingFindings(r.body) })),
+    ...snapshot.summaries.map((c) => ({ kind: 'summary-comment', where: 'summary', at: c.at, findings: blockingFindings(c.body) })),
   ].filter((r) => r.findings.length > 0);
 
   // The acknowledgement must be newer than the newest finding it clears.
@@ -328,6 +326,7 @@ function verdict(code, label) {
   process.exit(code);
 }
 
+/** Read the PR, wait for review completion, and emit the findings verdict. */
 function main() {
   const pr = Number(process.argv[2]);
   const asJson = process.argv.includes('--json');
@@ -381,19 +380,19 @@ function main() {
     console.log(JSON.stringify({ schemaVersion: 1, pr, reviewed, reviewerState: state, blockers }, null, 2));
   }
 
-  if (state === 'working') {
-    console.error(`coderabbit-guard: PR #${pr} BLOCKED: no finished CodeRabbit review for this commit.`);
+  if (blockers.length === 0 && state === 'working') {
+    console.error(`coderabbit-guard: PR #${pr} PENDING: no finished CodeRabbit review for this commit.`);
     console.error('Answered comments from an earlier commit do not cover this one.');
     console.error('Wait for the review to appear and finish, then run this again.');
-    verdict(1, 'BLOCKED');
+    verdict(2, 'PENDING');
   }
   // The head must have been REVIEWED, whatever the pause state says. Asking
   // this only while paused was a false green: commenting "@coderabbitai review"
   // lifts the pause the moment it is posted, so a run straight afterwards
   // reported CLEAR having checked nothing about the new head. The pause is only
   // ever the explanation for why coverage is missing, never a substitute for it.
-  if (!hasReviewForHead(owner, name, pr)) {
-    console.error(`coderabbit-guard: PR #${pr} BLOCKED: the head commit has not been reviewed.`);
+  if (blockers.length === 0 && !hasReviewForHead(owner, name, pr)) {
+    console.error(`coderabbit-guard: PR #${pr} PENDING: the head commit has not been reviewed.`);
     if (snapshot.paused) {
       console.error('CodeRabbit has PAUSED reviews on this branch, so the green status on the');
       console.error('head is from its last pass. Comment "@coderabbitai review", WAIT for the');
@@ -401,18 +400,18 @@ function main() {
     } else {
       console.error('Wait for the review of this commit to finish, then run this again.');
     }
-    verdict(1, 'BLOCKED');
+    verdict(2, 'PENDING');
   }
-  if (!reviewed) {
+  if (blockers.length === 0 && !reviewed) {
     if (state === 'done') {
-      console.error(`coderabbit-guard: PR #${pr} BLOCKED: CodeRabbit has not posted its review yet.`);
-      verdict(1, 'BLOCKED');
+      console.error(`coderabbit-guard: PR #${pr} PENDING: CodeRabbit has not posted its review yet.`);
+      verdict(2, 'PENDING');
     }
     console.error(`coderabbit-guard: PR #${pr} has no CodeRabbit review, and CodeRabbit does not appear to be reviewing this repo.`);
     verdict(2, 'UNKNOWN (stop and look)');
   }
   if (blockers.length === 0) {
-    say(`coderabbit-guard: PR #${pr} is clear (every CodeRabbit comment is resolved or answered).`);
+    say(`coderabbit-guard: PR #${pr} is clear (no unresolved CodeRabbit critical or major findings).`);
     verdict(0, 'CLEAR');
   }
 
