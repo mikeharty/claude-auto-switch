@@ -82,3 +82,12 @@ it.each(['Minor', 'Nitpick'])('ignores critical/major badges in %s inline detail
 it('checks the full inline header without the display excerpt limit', async () => {
   expect(await runGuard({ severity: 'Major', covered: true, headerPrefix: '_Category_ | '.repeat(15) })).toBe(1);
 });
+
+it.each(['body', 'summary'])('ignores quoted severity badges in %s finding details', async (source) => {
+  for (const severity of ['Minor', 'Nitpick']) {
+    expect(await runGuard({
+      severity, source, covered: true,
+      details: 'A detail quotes `_Major_` or `_Critical_`.\n```markdown\n_⚠️ Potential issue_ | _🔴 Critical_\n```',
+    })).toBe(0);
+  }
+});
