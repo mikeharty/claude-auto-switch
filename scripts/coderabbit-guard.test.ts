@@ -8,9 +8,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function runGuard({ state = 'success', covered = false, severity = '', source = 'inline', resolved = false, paused = false } = {}) {
+async function runGuard({ state = 'success', covered = false, severity = '', source = 'inline', resolved = false, paused = false, details = 'Finding details.', headerPrefix = '' } = {}) {
   vi.resetModules();
-  const finding = severity ? `_⚠️ Potential issue_ | _🟠 ${severity}_\nFinding details.` : '';
+  const finding = severity ? `
+${headerPrefix}_⚠️ Potential issue_ | _🟠 ${severity}_\n${details}` : '';
   const reviews = covered || source === 'body' ? [{
     id: 1, user: { login: 'coderabbitai[bot]' }, commit_id: covered ? 'head' : 'old',
     body: source === 'body' ? finding : 'Review complete.', submitted_at: '2026-09-19T00:00:00Z',
@@ -33,6 +34,7 @@ async function runGuard({ state = 'success', covered = false, severity = '', sou
   });
   vi.stubGlobal('process', { ...process, argv: ['node', 'coderabbit-guard.mjs', '87', '--wait', '0'] });
   const exit = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+  exit.mockClear();
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
   // @ts-expect-error -- execute the actual JavaScript CLI with mocked GitHub responses
@@ -71,4 +73,12 @@ it('clears resolved major findings on a reviewed head', async () => {
 
 it('clears a reviewed head without findings', async () => {
   expect(await runGuard({ covered: true })).toBe(0);
+});
+
+it.each(['Minor', 'Nitpick'])('ignores critical/major badges in %s inline details', async (severity) => {
+  expect(await runGuard({ severity, covered: true, details: 'Example: _🟠 Major_\nQuoted label: _critical_' })).toBe(0);
+});
+
+it('checks the full inline header without the display excerpt limit', async () => {
+  expect(await runGuard({ severity: 'Major', covered: true, headerPrefix: '_Category_ | '.repeat(15) })).toBe(1);
 });

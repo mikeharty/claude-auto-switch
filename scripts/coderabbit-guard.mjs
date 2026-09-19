@@ -113,7 +113,8 @@ function reviewBodies(owner, name, pr) {
  * What CodeRabbit is doing about the CURRENT commit.
  *
  * It posts its own check per commit, so that check is the honest answer to "has
- * this version been reviewed". Both states mean the review is not ready (exit 2):
+ * this version been reviewed". Both states mean the review is not ready (exit 2),
+ * unless unresolved critical/major findings already require exit 1:
  *
  * - 'working': a review is running right now. Answered comments from an EARLIER
  *   commit do not cover the code being merged, and clearing on them would merge
@@ -278,7 +279,8 @@ function collectBlockers(snapshot) {
     const first = thread.comments?.nodes?.[0];
     if (!first || !isReviewer(first.author?.login)) continue;
     if (threadAnswered(thread, isReviewer)) continue;
-    if (!BLOCKING_SEVERITY.test(first.body ?? '')) continue;
+    // Details can quote other severity badges; only the full header classifies this finding.
+    if (!BLOCKING_SEVERITY.test(firstLine(first.body, Infinity))) continue;
     blockers.push({
       kind: 'inline',
       where: `${first.path ?? '?'}:${first.line ?? '?'}`,
