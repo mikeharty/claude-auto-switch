@@ -43,6 +43,7 @@ const OWN_CHECK = 'coderabbit findings resolved';
 
 /** Only explicit critical/major severity badges block this gate. */
 const BLOCKING_SEVERITY = /_[^\w_\n]*(critical|major)[^\w_\n]*_/i;
+/** Select critical/major headers from the parsed body findings. */
 const blockingFindings = (body) => bodyFindings(body).filter((line) => BLOCKING_SEVERITY.test(line));
 
 /** The first non-empty line of a block of text, shortened for one-line output. */
@@ -325,6 +326,7 @@ function verdict(code, label) {
   process.exit(code);
 }
 
+/** Read the PR, wait for review completion, and emit the findings verdict. */
 function main() {
   const pr = Number(process.argv[2]);
   const asJson = process.argv.includes('--json');
