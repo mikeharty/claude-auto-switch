@@ -618,3 +618,12 @@ it.each([0, 1, 2, 3])('recognizes fences with %i leading spaces', (indent) => {
 it('does not open a fence indented by four spaces', () => {
   expect(bodyFindings('    ```\n_🟠 Major_')).toEqual(['_🟠 Major_']);
 });
+
+it.each(['```markdown`', '``` info `tick`', '> ```markdown`'])('rejects invalid backtick opener %j', (opening) => {
+  expect(bodyFindings(`${opening}\n_🟠 Major_`)).toEqual(['_🟠 Major_']);
+});
+
+it.each(['```markdown', '~~~ info `tick`'])('still recognizes valid fence opener %j', (opening) => {
+  const closing = opening.slice(0, 3);
+  expect(bodyFindings(`${opening}\n_🔴 Critical_\n${closing}\n_🟠 Major_`)).toEqual(['_🟠 Major_']);
+});

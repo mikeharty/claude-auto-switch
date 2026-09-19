@@ -100,3 +100,9 @@ it.each(['body', 'summary'])('keeps indented fence-like lines inside %s examples
     expect(await runGuard({ severity: 'Minor', source, covered: true, details })).toBe(0);
   }
 });
+
+it.each(['body', 'summary'])('does not hide a blocking %s finding after an invalid fence opener', async (source) => {
+  expect(await runGuard({
+    source, covered: true, severity: 'Minor', details: '```markdown`\n_🔴 Critical_',
+  })).toBe(1);
+});

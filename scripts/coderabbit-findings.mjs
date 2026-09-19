@@ -57,7 +57,8 @@ export function bodyFindings(body) {
       if (new RegExp(`^ {0,3}${fence[0]}{${fence.length},}\\s*$`).test(text)) fence = undefined;
       continue;
     }
-    const opening = text.match(/^ {0,3}(`{3,}|~{3,})/);
+    // Backtick info strings cannot contain backticks; tilde info strings can.
+    const opening = text.match(/^ {0,3}(`{3,})[^`]*$/) ?? text.match(/^ {0,3}(~{3,})/);
     if (opening) {
       fence = opening[1];
       continue;
