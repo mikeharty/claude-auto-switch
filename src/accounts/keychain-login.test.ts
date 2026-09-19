@@ -303,6 +303,40 @@ describe('Keychain-only profiles', () => {
     expect(existsSync(dir)).toBe(false);
     expect(removeSessionDir(dir)).toBe(false);
     expect(keychain.has(dir)).toBe(false);
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it('preserves an absent session path after credential cleanup fails so the sweep retries', () => {
+    const session = path.join(home, 'sessions', '123');
+    keychain.set(session, credential('session'));
+    vi.mocked(deleteKeychainCredential).mockImplementationOnce(() => {
+      throw new Error('locked');
+    });
+    expect(removeSessionDir(session)).toBe(false);
+    expect(existsSync(session)).toBe(true);
+    expect(keychain.has(session)).toBe(true);
+    expect(sweepDeadSessionDirs(context.ctx, { isAlive: () => false })).toEqual(['123']);
+    expect(existsSync(session)).toBe(false);
+    expect(keychain.has(session)).toBe(false);
+  });
+
+  it('retries credential cleanup for an outside-tree account before deregistering it', () => {
+    mkdirSync(dir);
+    const keptFile = path.join(dir, 'keep.txt');
+    writeFileSync(keptFile, 'keep');
+    setActive('work', context.ctx);
+    vi.mocked(deleteKeychainCredential).mockImplementationOnce(() => {
+      throw new Error('locked');
+    });
+    expect(removeCommand(context, 'work', { purge: true })).toBe(1);
+    expect(getAccount('work', context.ctx)?.dir).toBe(dir);
+    expect(getActive(context.ctx)).toBe('work');
+    expect(keychain.has(dir)).toBe(true);
+    expect(removeCommand(context, 'work', { purge: true })).toBe(0);
+    expect(keychain.has(dir)).toBe(false);
+    expect(getAccount('work', context.ctx)).toBeUndefined();
+    expect(getActive(context.ctx)).toBeNull();
+    expect(readFileSync(keptFile, 'utf8')).toBe('keep');
   });
 
   it.each(['keychain', 'file'])('restores a %s session login after partial deletion and retries the sweep', (store) => {

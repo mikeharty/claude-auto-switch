@@ -33,6 +33,14 @@ export function removeCommand(
     // registry entry was crafted or a custom --dir escaped it.
     const profiles = profilesDir(context.config, context.ctx);
     if (!isInside(profiles, account.dir)) {
+      try {
+        clearCredential(account.dir);
+      } catch {
+        context.out(
+          `could not clear credentials for "${name}" at ${account.dir}; account remains registered; retry --purge`,
+        );
+        return 1;
+      }
       deregister();
       context.out(
         `deregistered "${name}", but did NOT purge ${account.dir} (outside ${profiles}); delete it yourself if intended`,

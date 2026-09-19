@@ -3,6 +3,7 @@ import { readCredential, writeCredential } from '../accounts/credential-storage.
 import {
   copyFileSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -267,6 +268,10 @@ export function removeSessionDir(dir: string): boolean {
         // The directory or credential store may still be inaccessible.
       }
     }
+    // The sweep discovers retry paths through directory entries. Keep an empty
+    // owner-only directory even if it was already absent when cleanup failed.
+    // Do not report a retryable failure unless that path has been preserved.
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     return false; // busy (a live session, despite the pid check); next start retries
   }
 }
