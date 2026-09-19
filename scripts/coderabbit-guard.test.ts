@@ -8,6 +8,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** Execute the real guard against synthetic GitHub responses and capture its exit code. */
 async function runGuard({ state = 'success', covered = false, severity = '', source = 'inline', resolved = false, paused = false, details = 'Finding details.', headerPrefix = '' } = {}) {
   vi.resetModules();
   const finding = severity ? `
@@ -89,5 +90,13 @@ it.each(['body', 'summary'])('ignores quoted severity badges in %s finding detai
       severity, source, covered: true,
       details: 'A detail quotes `_Major_` or `_Critical_`.\n```markdown\n_⚠️ Potential issue_ | _🔴 Critical_\n```',
     })).toBe(0);
+  }
+});
+
+it.each(['body', 'summary'])('keeps indented fence-like lines inside %s examples', async (source) => {
+  for (const prefix of ['', '> ', '> > ']) {
+    const details = ['```markdown', '    ```', '_🔴 Critical_', '```']
+      .map((line) => prefix + line).join('\n');
+    expect(await runGuard({ severity: 'Minor', source, covered: true, details })).toBe(0);
   }
 });

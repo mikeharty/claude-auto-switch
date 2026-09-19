@@ -50,13 +50,14 @@ export function bodyFindings(body) {
   const findings = [];
   let fence;
   for (const line of String(body ?? '').split('\n')) {
-    const text = line.replace(/^\s*(?:>\s*)*/, '').trim();
+    // Remove quote markers and their optional space, preserving content indentation.
+    const text = line.replace(/^(?: {0,3}> ?)+/, '');
     if (fence) {
       // A closing fence must use the same character and at least the opening length.
-      if (new RegExp(`^${fence[0]}{${fence.length},}\\s*$`).test(text)) fence = undefined;
+      if (new RegExp(`^ {0,3}${fence[0]}{${fence.length},}\\s*$`).test(text)) fence = undefined;
       continue;
     }
-    const opening = text.match(/^(`{3,}|~{3,})/);
+    const opening = text.match(/^ {0,3}(`{3,}|~{3,})/);
     if (opening) {
       fence = opening[1];
       continue;
